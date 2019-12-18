@@ -6,7 +6,6 @@ from pymongo import MongoClient
 from slackclient import SlackClient
 
 # Instantiate Mongo Client
-
 mongo_client = MongoClient("mongodb+srv://"
     + config.username + ":" + config.password
     + "@bogbdaydb-j8wgl.mongodb.net/test?retryWrites=true&w=majority")
@@ -76,11 +75,11 @@ def handle_command(command, channel):
         response = "These are the birthdays today:"
 
     elif command.startswith("myday"):
-        daysLeft = 364
+        daysLeft = days_until_bday(command)
         response = "Days until your birthday: *" + str(daysLeft) + "*"
 
     elif command.startswith("add"):
-        add_birthday(command)
+        response = add_birthday(command)
 
     # Sends the response back to the channel
     slack_client.api_call(
@@ -89,15 +88,19 @@ def handle_command(command, channel):
         text = response or default_response
     )
 
+def days_until_bday(command):
+    return command
+
 def add_birthday(command):
     toAdd = command.split(' ', 1)[1]
     user_id, message = parse_direct_mention(toAdd)
-    name = slack_client.api_call(
-        "users.profile.get",
-        user = user_id
-    )
-    post = {"_id": user_id, "name": name, "bday": message}
-    collection.insert_one(post)
+    try:
+        datetime.strptime(message, '%m-%d')
+        post = {"_id": user_id, "bday": message}
+        collection.insert_one(post)
+        return "Birthday added!"
+    except ValueError:
+        return "Incorrect date format, should be MM-DD"
 
 if __name__ == "__main__":
     # Connect to Slack RTM API
