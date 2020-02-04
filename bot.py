@@ -191,7 +191,14 @@ def handle_message(event_data):
     elif "bday" in text[0:4]:
       response = findAndRetrieveBday(user_id)
     elif "help" in text[0:4]:
-      response = "Try typing: cheatsheet, bit/bits, byte/bytes, team, or bday"
+      response = "Available commands:\n" \
+        + "hi or hello                        Welcome message.\n" \
+        + "cheatsheet                       Link to bits/bytes cheatsheet.\n" \
+        + "bits                                   See your current bit count.\n" \
+        + "bytes                                See your current byte count.\n" \
+        + "see bytes [team]              See the current byte count for a specific team\n" \
+        + "bday                                 Display your birthday.\n" \
+        + "add bday                          Adds your birthday to the database."
     elif "execute order 66" in text and user_id==admin_id:
       executeOrder66(channel_id)
       response = "Executed my Lord"
