@@ -8,7 +8,7 @@ from slackclient import SlackClient
 # Instantiate Mongo Client
 mongo_client = MongoClient("mongodb+srv://"
     + config.username + ":" + config.password
-    + "@spring2020-wjlnz.mongodb.net/test?retryWrites=true&w=majority")
+    + config.db_link)
 
 # Specify DB
 db = mongo_client["Spring2020"]
@@ -23,6 +23,7 @@ slack_events_adapter = SlackEventAdapter(slack_signing_secret, "/slack/events")
 slack_bot_token = config.slack_token
 slack_client = SlackClient(slack_bot_token)
 
+admin_id = config.admin_id
 bogbot_id = slack_client.api_call("auth.test")["user_id"]
 
 def findAndRetrieveBits(user_id):
@@ -41,12 +42,16 @@ def findAndRetrieveBytes(channel_id, user_id):
   else:
     teams = db_data["team"].split(";")
     for team in teams:
-      byte_count = collection.find_one({"name": team})
-      if byte_count is not None:
-        response = "%s currently has %d bytes!" % (team, byte_count["bytes"])
-        slack_client.api_call("chat.postMessage", channel=channel_id, text=response)
-      else:
-        response = "%s does not compete for bytes." % team
+      try:
+        byte_count = collection.find_one({"name": team})
+        if byte_count is not None:
+          response = "%s currently has %d bytes!" % (team, byte_count["bytes"])
+          slack_client.api_call("chat.postMessage", channel=channel_id, text=response)
+        else:
+          response = "%s does not compete for bytes." % team
+          slack_client.api_call("chat.postMessage", channel=channel_id, text=response)
+      except TypeError:
+        response = "That team does not exist."
         slack_client.api_call("chat.postMessage", channel=channel_id, text=response)
   return
 
@@ -62,9 +67,12 @@ def findAndRetrieveTeam(user_id):
 
 def add_birthday(user_id, date):
   try:
+    if (collection.find_one({"_id": user_id})["birthday"] == "Update"):
+      increaseBits(user_id, 1)
+
     datetime.strptime(date, '%m-%d')
     collection.find_one_and_update({'_id': user_id}, {'$set': {'birthday': date}})
-    return "Birthday added!"
+    return "Birthday updated to %s!" % datetime.strptime(date, '%m-%d').strftime("%B %d")
   except ValueError:
     return "Incorrect date format, should be MM-DD"
 
@@ -72,14 +80,14 @@ def findAndRetrieveBday(user_id):
   db_data = collection.find_one({"_id": user_id})
   if db_data is None:
     createProfile(user_id)
-    response_team = 'Your birthday is not yet on our database.' % user_id
+    response_team = "Your birthday is not yet on our database. Use 'add bday MM-DD' to add yours to your profile!"
   else:
     bday = db_data["birthday"]
     if bday != "Update":
       bday = datetime.strptime(bday, '%m-%d').strftime("%B %d")
       response_team = 'Your birthday is on %s!' % bday
     else:
-      response_team = 'Your birthday is not yet on our database. Use "addbday MM-DD" to add yours to your profile!' % user_id
+      response_team = "Your birthday is not yet on our database. Use 'add bday MM-DD' to add yours to your profile!"
   return response_team
 
 def createProfile(user_id):
@@ -99,37 +107,92 @@ def updateTeamBytes(team_name, num_inc):
   collection.find_one_and_update({'name': team_name}, {'$inc': {'bytes': int(num_inc)}})
   return
 
+def increaseBits(user_id, num_inc):
+  collection.find_one_and_update({'_id': user_id}, {'$inc': {'bits': int(num_inc)}})
+  return
+
+def updateBits(user_id, numToSet):
+  collection.find_one_and_update({'_id': user_id}, {'$set': {'bits': int(numToSet)}})
+  return
+
 # Respond to DMs
 @slack_events_adapter.on("message")
 def handle_message(event_data):
   message = event_data["event"]
+  text = message.get('text')
   user_id = message["user"]
   channel_id = message["channel"]
 
   if message.get("subtype") is None and user_id != bogbot_id:
-    if ("hi" in message.get('text') or "hello" in message.get('text')):
+    if ("hi" in text[0:2] or "hello" in text[0:5]):
       response = 'Hello <@%s>! :tada:' % user_id
-    elif ("bit" in message.get('text') or "bits" in message.get('text')):
+    elif "cheatsheet" in text[0:10]:
+      response = config.cheatsheet_link
+    elif "add bit" in text[0:7] and user_id == admin_id:
+      try:
+        userToAdd, num_inc = text.split(' ')[2], text.split(' ')[3]
+        userToAdd = userToAdd[2:-1]
+        increaseBits(userToAdd, num_inc)
+        new_bit_count = collection.find_one({"_id": userToAdd})['bits']
+        response = "%s Bits added for <@%s>, making their Bit count: %d" % (num_inc, userToAdd, new_bit_count)
+      except NameError:
+        response = "Missing a parameter"
+    elif "set bit" in text[0:7] and user_id == admin_id:
+      try:
+        userToAdd, numToSet = text.split(' ')[2], text.split(' ')[3]
+        userToAdd = userToAdd[2:-1]
+        updateBits(userToAdd, numToSet)
+        new_bit_count = collection.find_one({"_id": userToAdd})['bits']
+        response = "<@%s> Bit count: %d" % (userToAdd, new_bit_count)
+      except NameError:
+        response = "Missing a parameter"
+    elif "see bit" in text[0:7] and user_id == admin_id:
+      try:
+        userToAdd = text.split(' ')[2]
+        userToAdd = userToAdd[2:-1]
+        bit_count = collection.find_one({"_id": userToAdd})['bits']
+        response = "<@%s> Bit count: %d" % (userToAdd, bit_count)
+      except NameError:
+        response = "Missing a parameter"
+    elif "bit" in text[0:3]:
       bit_count = findAndRetrieveBits(user_id)
-      response = 'Bits for <@%s>: %d' % (user_id, bit_count)
-    elif "addbytes" in message.get('text') and user_id=="UMXA2A2SZ":
-      team, num_inc = message.get('text').split(' ')[1], message.get('text').split(' ')[2]
-      updateTeamBytes(team, num_inc)
-      response = "Bytes Added!"
-    elif ("byte" in message.get('text') or "bytes" in message.get('text')):
-      response = 'Keep collecting Bytes before the Binary Bash!'
+      response = 'Your Bit count: %d' % bit_count
+    elif "add byte" in text[0:8] and user_id==admin_id:
+      try:
+        team, num_inc = text.split(' ')[2], text.split(' ')[3]
+        updateTeamBytes(team, num_inc)
+        response = "Bytes Added for Team %s!" % team
+      except NameError:
+        response = "Missing a parameter"
+    elif "see byte" in text[0:8]:
+      try:
+        team = text.split(' ')[2]
+        try:
+          byte_count = collection.find_one({"name": team})['bytes']
+          response = "Team %s byte count: %d" % (team, byte_count)
+        except TypeError:
+          if team in ["Marketing", "Community", "Product Ops", "Finance", "Events"]:
+            response = "Committees do not compete for Bytes"
+          elif team in ["Exec", "Bootcamp", "Website", "NPP"]:
+            response = "%s does not compete for Bytes" % team
+          else:
+            response = "Invalid team name (use title-case) \n Options: BGC Safety, BGC Dynamics, DMS, Liv2BGirl, MedShare, Miqueas, Ombudsman, PACTS, VMS"
+      except NameError:
+        response = "Missing a parameter"
+    elif "byte" in text[0:5]:
+      response = ''
       findAndRetrieveBytes(channel_id, user_id)
-    elif "team" in message.get('text'):
+    elif "team" in text[0:4]:
       team = findAndRetrieveTeam(user_id)
       response = '<@%s> is on team %s!' % (user_id, team)
-    elif "addbday" in message.get('text'):
-      birthday_date = message.get('text').split(' ')[1]
+    elif "add bday" in text[0:8]:
+      birthday_date = text.split(' ')[2]
       response = add_birthday(user_id, birthday_date)
-    elif "bday" in message.get('text'):
+    elif "bday" in text[0:4]:
       response = findAndRetrieveBday(user_id)
-    elif "help" in message.get('text'):
-      response = "Try typing: hi/hello, bit/bits, byte/bytes, team, or bday"
-    elif "execute order 66" in message.get('text') and user_id=="UMXA2A2SZ":
+    elif "help" in text[0:4]:
+      response = "Try typing: cheatsheet, bit/bits, byte/bytes, team, or bday"
+    elif "execute order 66" in text and user_id==admin_id:
       executeOrder66(channel_id)
       response = "Executed my Lord"
     else:
