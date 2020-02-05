@@ -3,7 +3,7 @@ import config
 from datetime import datetime
 from pymongo import MongoClient
 from slackeventsapi import SlackEventAdapter
-from slackclient import SlackClient
+from slack import WebClient
 
 # Instantiate Mongo Client
 mongo_client = MongoClient("mongodb+srv://"
@@ -21,10 +21,10 @@ slack_events_adapter = SlackEventAdapter(slack_signing_secret, "/slack/events")
 
 # Create a SlackClient for your bot to use for Web API requests
 slack_bot_token = config.slack_token
-slack_client = SlackClient(slack_bot_token)
+slack_client = WebClient(slack_bot_token)
 
 admin_id = config.admin_id
-bogbot_id = slack_client.api_call("auth.test")["user_id"]
+bogbot_id = slack_client.auth_test()["user_id"]
 
 def findAndRetrieveBits(user_id):
   db_data = collection.find_one({"_id": user_id})
@@ -46,14 +46,14 @@ def findAndRetrieveBytes(channel_id, user_id):
         byte_count = collection.find_one({"name": team})
         if byte_count is not None:
           response = "%s currently has %d bytes!" % (team, byte_count["bytes"])
-          slack_client.api_call("chat.postMessage", channel=channel_id, text=response)
+          slack_client.chat_postMessage(channel=channel_id, text=response)
         else:
           response = "%s does not compete for bytes." % team
-          slack_client.api_call("chat.postMessage", channel=channel_id, text=response)
+          slack_client.chat_postMessage(channel=channel_id, text=response)
       except TypeError:
         response = "That team does not exist."
-        slack_client.api_call("chat.postMessage", channel=channel_id, text=response)
-  return
+        slack_client.chat_postMessage(channel=channel_id, text=response)
+  return 'Ok'
 
 def findAndRetrieveTeam(user_id):
   db_data = collection.find_one({"_id": user_id})
@@ -91,29 +91,30 @@ def findAndRetrieveBday(user_id):
   return response_team
 
 def createProfile(user_id):
-  user_data = slack_client.api_call("users.info", user=user_id)['user']
+  user_data = slack_client.users_info(user=user_id)['user']
   post = {"_id": user_id, "name": user_data['real_name'], "team": "Update", "bits": 0, "birthday": "Update"}
   collection.insert_one(post)
+  return 'Oks'
 
 def executeOrder66(channel_info):
-  members = slack_client.api_call("conversations.members", channel=channel_info, limit=200)["members"]
+  members = slack_client.conversations_members(channel=channel_info, limit=200)["members"]
   for member in members:
     db_data = collection.find_one({"_id": member})
     if db_data is None:
       createProfile(member)
-  return
+  return 'Ok'
 
 def updateTeamBytes(team_name, num_inc):
   collection.find_one_and_update({'name': team_name}, {'$inc': {'bytes': int(num_inc)}})
-  return
+  return 'Ok'
 
 def increaseBits(user_id, num_inc):
   collection.find_one_and_update({'_id': user_id}, {'$inc': {'bits': int(num_inc)}})
-  return
+  return 'Ok'
 
 def updateBits(user_id, numToSet):
   collection.find_one_and_update({'_id': user_id}, {'$set': {'bits': int(numToSet)}})
-  return
+  return 'Ok'
 
 # Respond to DMs
 @slack_events_adapter.on("message")
@@ -180,7 +181,7 @@ def handle_message(event_data):
       except NameError:
         response = "Missing a parameter"
     elif "byte" in text[0:5]:
-      response = ''
+      response = ' '
       findAndRetrieveBytes(channel_id, user_id)
     elif "team" in text[0:4]:
       team = findAndRetrieveTeam(user_id)
@@ -194,6 +195,7 @@ def handle_message(event_data):
       response = "Available commands:\n" \
         + "hi or hello                        Welcome message.\n" \
         + "cheatsheet                       Link to bits/bytes cheatsheet.\n" \
+        + "team                                 See your current team(s).\n" \
         + "bits                                   See your current bit count.\n" \
         + "bytes                                See your current byte count.\n" \
         + "see bytes [team]              See the current byte count for a specific team\n" \
@@ -205,7 +207,7 @@ def handle_message(event_data):
     else:
       response = "Unknown command. Type 'help' for list of commands."
 
-    slack_client.api_call("chat.postMessage", channel=channel_id, text=response)
+    slack_client.chat_postMessage(channel=channel_id, text=response)
 
 # Error events
 @slack_events_adapter.on("error")
@@ -214,4 +216,4 @@ def error_handler(err):
 
 # Once we have our event listeners configured, we can start the
 # Flask server with the default `/events` endpoint on port 3000
-slack_events_adapter.start(port=3000)
+slack_events_adapter.start(host="0.0.0.0", port=3000)
