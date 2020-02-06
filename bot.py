@@ -1,4 +1,4 @@
-import os, pymongo, pprint, datetime
+import os, pymongo, pprint, datetime, schedule
 import config
 from datetime import datetime
 from pymongo import MongoClient
@@ -23,8 +23,13 @@ slack_events_adapter = SlackEventAdapter(slack_signing_secret, "/slack/events")
 slack_bot_token = config.slack_token
 slack_client = WebClient(slack_bot_token)
 
+# Slack ID for admin and Bot
 admin_id = config.admin_id
 bogbot_id = slack_client.auth_test()["user_id"]
+
+# Important channels
+announce_channel = config.announcements_id
+test_channel = config.test_id
 
 def findAndRetrieveBits(user_id):
   db_data = collection.find_one({"_id": user_id})
@@ -116,6 +121,40 @@ def updateBits(user_id, numToSet):
   collection.find_one_and_update({'_id': user_id}, {'$set': {'bits': int(numToSet)}})
   return 'Ok'
 
+def findTopThreeBits():
+  result = collection.find()
+  member_bits = []
+  fakeVar = 0
+  for user in list(result):
+    try:
+      if user['bits'] < 999:
+        member_bits.append((user["_id"], user["bits"]))
+    except KeyError:
+      fakeVar += 1
+  topBits = sorted(member_bits, key = lambda x: x[1], reverse=True)
+  response = "Current Bit Standings:\n 1. <@%s> with %d bits!\n 2. <@%s> with %d bits!\n 3. <@%s> with %d bits!\n 4. <@%s> with %d bits!\n 5. <@%s> with %d bits!" % (topBits[0][0], topBits[0][1], topBits[1][0], topBits[1][1], topBits[2][0], topBits[2][1], topBits[3][0], topBits[3][1], topBits[4][0], topBits[4][1])
+  return response
+
+def findTopThreeBytes():
+  result = collection.find()
+  team_bytes = []
+  fakeVar = 0
+  for user in list(result):
+    try:
+      if user['bytes'] >= 0:
+        team_bytes.append((user["name"], user["bytes"]))
+    except KeyError:
+      fakeVar += 1
+  topBytes = sorted(team_bytes, key = lambda x: x[1], reverse=True)
+  response = "Current Byte Standings:\n 1. Team %s with %d bytes!\n 2. Team %s with %d bytes!\n 3. Team %s with %d bytes!" % (topBytes[0][0], topBytes[0][1], topBytes[1][0], topBytes[1][1], topBytes[2][0], topBytes[2][1])
+  return response
+
+def displayRankings():
+  response = findTopThreeBits()
+  response = response + "\n\n" + findTopThreeBytes() + "\n\n Bit/Byte Cheatsheet:\n" + config.cheatsheet_link
+  slack_client.chat_postMessage(channel=test_channel, text=response)
+  return 'OK'
+
 # Respond to DMs
 @slack_events_adapter.on("message")
 def handle_message(event_data):
@@ -129,13 +168,23 @@ def handle_message(event_data):
       response = 'Hello <@%s>! :tada:' % user_id
     elif "cheatsheet" in text[0:10]:
       response = config.cheatsheet_link
+    elif "see rank" in text[0:8] and user_id == admin_id:
+      displayRankings()
+      response = "Displayed!"
+    elif "see bitrank" in text[0:11] and user_id == admin_id:
+      response = findTopThreeBits(channel_id)
+    elif "see byterank" in text[0:12] and user_id == admin_id:
+      response = findTopThreeBytes(channel_id)
     elif "add bit" in text[0:7] and user_id == admin_id:
       try:
-        userToAdd, num_inc = text.split(' ')[2], text.split(' ')[3]
-        userToAdd = userToAdd[2:-1]
-        increaseBits(userToAdd, num_inc)
-        new_bit_count = collection.find_one({"_id": userToAdd})['bits']
-        response = "%s Bits added for <@%s>, making their Bit count: %d" % (num_inc, userToAdd, new_bit_count)
+        usersToAdd, num_inc = text.split(' ')[2:-1], text.split(' ')[-1]
+        for user in usersToAdd:
+          user = user[2:-1]
+          increaseBits(user, num_inc)
+          new_bit_count = collection.find_one({"_id": user})['bits']
+          response = "%s Bits added for <@%s>, making their Bit count: %d" % (num_inc, user, new_bit_count)
+          slack_client.chat_postMessage(channel=channel_id, text=response)
+        response = ' '
       except NameError:
         response = "Missing a parameter"
     elif "set bit" in text[0:7] and user_id == admin_id:
@@ -217,3 +266,6 @@ def error_handler(err):
 # Once we have our event listeners configured, we can start the
 # Flask server with the default `/events` endpoint on port 3000
 slack_events_adapter.start(host="0.0.0.0", port=3000)
+
+# Update Bit/Byte Rankings Every Week
+# schedule.every().wednesday.at("20:16").do(displayRankings)
