@@ -1,4 +1,4 @@
-import os, pymongo, pprint, datetime, schedule
+import os, pymongo, datetime, schedule, time
 import config
 from datetime import datetime
 from pymongo import MongoClient
@@ -26,6 +26,9 @@ slack_client = WebClient(slack_bot_token)
 # Slack ID for admin and Bot
 admin_id = config.admin_id
 bogbot_id = slack_client.auth_test()["user_id"]
+
+# Get current timestamp
+currentTimestamp = time.time()
 
 # Important channels
 announce_channel = config.announcements_id
@@ -175,8 +178,25 @@ def parseNames(message):
       users.append(word[2:-1])
   return users
 
-# def checkSameTeam(user_ids):
-#   for user in user_ids:
+def findBitAmount(users):
+  teams = {}
+  for user in users:
+    user_teams = collection.find_one({"_id": user})['team'].split(";")
+    for team in user_teams:
+      if team not in teams:
+        teams[team] = 1
+      else:
+        teams[team] += 1
+
+  bit_amount = 2
+  for team in teams.keys():
+    if teams[team] == len(users) or team == "Exec":
+      bit_amount = 3
+
+  if len(users) == 1:
+    bit_amount = 0
+
+  return bit_amount
 
 # Respond to DMs
 @slack_events_adapter.on("message")
@@ -188,19 +208,44 @@ def handle_message(event_data):
   channel_type = message["channel_type"]
   timestamp_message = message["ts"]
 
-  if channel_type == "channel":
-    if user_id != bogbot_id and channel_id == test_channel:
+  if channel_type == "channel" and user_id != bogbot_id and float(timestamp_message) > currentTimestamp:
+    if channel_id == bits_channel:
       if text != '' and "files" in message:
         slack_client.reactions_add(channel=test_channel, name="doughnut", timestamp=timestamp_message)
         slack_client.reactions_add(channel=test_channel, name="camera_with_flash", timestamp=timestamp_message)
       else:
         slack_client.reactions_add(channel=test_channel, name="michelle_facepalm", timestamp=timestamp_message)
         slack_client.reactions_add(channel=test_channel, name="face_with_monocle", timestamp=timestamp_message)
-      dateUsers = parseNames(message)
-      for user in dateUsers:
-        increaseBits(user, 0)
-        new_bit_count = collection.find_one({"_id": user})['bits']
-        response = "2 Bits added for <@%s>, making their Bit count: %d" % (user, new_bit_count)
+
+      if text != '':
+        dateUsers = parseNames(message)
+        bit_amount = findBitAmount(dateUsers)
+        response = "The bit amount is: %d" % bit_amount
+        slack_client.chat_postMessage(channel=im_channel, text=response)
+
+        for user in dateUsers:
+          increaseBits(user, bit_amount)
+          new_bit_count = collection.find_one({"_id": user})['bits']
+          response = "%d Bits added for <@%s> for a donut date, making their Bit count: %d" % (bit_amount, user, new_bit_count)
+          slack_client.chat_postMessage(channel=im_channel, text=response)
+
+    elif channel_id == dogs_channel:
+      if "files" in message:
+        slack_client.reactions_add(channel=dogs_channel, name="doge2", timestamp=timestamp_message)
+        slack_client.reactions_add(channel=dogs_channel, name="heart_eyes", timestamp=timestamp_message)
+        bit_amount = 2
+        increaseBits(user_id, bit_amount)
+        new_bit_count = collection.find_one({"_id": user_id})['bits']
+        response = "%d Bits added for <@%s> for doggy pics, making their Bit count: %d" % (bit_amount, user_id, new_bit_count)
+        slack_client.chat_postMessage(channel=im_channel, text=response)
+
+    elif channel_id == memes_channel:
+      if "files" in message:
+        slack_client.reactions_add(channel=memes_channel, name="laughing", timestamp=timestamp_message)
+        bit_amount = 2
+        increaseBits(user_id, bit_amount)
+        new_bit_count = collection.find_one({"_id": user_id})['bits']
+        response = "%d Bits added for <@%s> for adding a meme, making their Bit count: %d" % (bit_amount, user_id, new_bit_count)
         slack_client.chat_postMessage(channel=im_channel, text=response)
 
   else:
@@ -313,12 +358,14 @@ def handle_message(event_data):
       else:
         response = "Unknown command. Type 'help' for list of commands."
 
-      slack_client.chat_postMessage(channel=channel_id, text=response)
+      if response != ' ':
+        slack_client.chat_postMessage(channel=channel_id, text=response)
 
 # Error events
 @slack_events_adapter.on("error")
 def error_handler(err):
     print("ERROR: " + str(err))
+
 
 # Once we have our event listeners configured, we can start the
 # Flask server with the default `/events` endpoint on port 3000
