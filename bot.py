@@ -121,6 +121,10 @@ def updateTeamBytes(team_name, num_inc):
   return 'Ok'
 
 def increaseBits(user_id, num_inc):
+  teams = collection.find_one({"_id": user_id})['team'].split(";")
+  for team in teams:
+    if team == 'Exec':
+      num_inc = 0
   collection.find_one_and_update({'_id': user_id}, {'$inc': {'bits': int(num_inc)}})
   return 'Ok'
 
@@ -209,13 +213,13 @@ def handle_message(event_data):
   timestamp_message = message["ts"]
 
   if channel_type == "channel" and user_id != bogbot_id and float(timestamp_message) > currentTimestamp:
-    if channel_id == bits_channel:
+    if channel_id == bits_channel and "parent_user_id" not in message:
       if text != '' and "files" in message:
-        slack_client.reactions_add(channel=test_channel, name="doughnut", timestamp=timestamp_message)
-        slack_client.reactions_add(channel=test_channel, name="camera_with_flash", timestamp=timestamp_message)
+        slack_client.reactions_add(channel=bits_channel, name="doughnut", timestamp=timestamp_message)
+        slack_client.reactions_add(channel=bits_channel, name="camera_with_flash", timestamp=timestamp_message)
       else:
-        slack_client.reactions_add(channel=test_channel, name="michelle_facepalm", timestamp=timestamp_message)
-        slack_client.reactions_add(channel=test_channel, name="face_with_monocle", timestamp=timestamp_message)
+        slack_client.reactions_add(channel=bits_channel, name="michelle_facepalm", timestamp=timestamp_message)
+        slack_client.reactions_add(channel=bits_channel, name="face_with_monocle", timestamp=timestamp_message)
 
       if text != '':
         dateUsers = parseNames(message)
