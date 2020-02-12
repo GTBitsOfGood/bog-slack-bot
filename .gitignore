@@ -1,5 +1,6 @@
 config.py
 __pycache__
-attendance.xlsx
-bootcamp_attendance.xlsx
 Old Attendance Sheets
+Scripts
+*.xls
+*.xlsx

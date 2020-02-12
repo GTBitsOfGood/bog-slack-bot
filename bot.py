@@ -117,11 +117,11 @@ def clearAttendance():
   return 'Ok'
 
 def collectAttendance():
-  members = slack_client.conversations_members(channel=announce_channel, limit=200)["members"]
-  for member in members:
-    db_data = collection.find_one({'_id': member})
-    if db_data is not None and db_data["checkedIn"]:
-      increaseBits(db_data['_id'], 2)
+  # members = slack_client.conversations_members(channel=announce_channel, limit=200)["members"]
+  # for member in members:
+  #   db_data = collection.find_one({'_id': member})
+  #   if db_data is not None and db_data["checkedIn"]:
+  #     increaseBits(db_data['_id'], 2)
   return 'Ok'
 
 def updateTeamBytes(team_name, num_inc):

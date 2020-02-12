@@ -12,11 +12,26 @@ db = mongo_client["Spring2020"]
 collection = db["member-manager"]
 posts = db.posts
 
+style0 = xlwt.easyxf('font: name Times New Roman, bold on')
+
 wb = xlwt.Workbook()
 ws = wb.add_sheet('Attendance Sheet')
 
-ws.write(0,0, "Name")
-ws.write(0,1, "Major")
-ws.write(0,2, "Email")
+ws.write(0,0, "Name", style0)
+ws.write(0,1, "Major", style0)
+ws.write(0,2, "Email", style0)
 
-wb.save('attendance_2_13.xlsx')
+checked_in_members = collection.find({"checkedIn": True})
+
+i = 1
+for member in checked_in_members:
+    print(member["name"] + " checked in.")
+    ws.write(i,0, member["name"])
+    ws.write(i,1, member["major"])
+    ws.write(i,2, member["email"])
+    collection.update_one({"name": member["name"]},
+        {"$set": {"checkedIn": False}},
+        {"$inc": {"bits": 2}})
+    i+=1
+
+wb.save('attendance.xls')
