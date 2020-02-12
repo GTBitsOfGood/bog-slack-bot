@@ -106,14 +106,22 @@ def createProfile(user_id):
   user_data = slack_client.users_info(user=user_id)['user']
   post = {"_id": user_id, "name": user_data['real_name'], "team": "Update", "bits": 0, "birthday": "Update"}
   collection.insert_one(post)
-  return 'Oks'
+  return 'Ok'
 
-def executeOrder66(channel_info):
-  members = slack_client.conversations_members(channel=channel_info, limit=200)["members"]
+def clearAttendance():
+  members = slack_client.conversations_members(channel=announce_channel, limit=200)["members"]
   for member in members:
     db_data = collection.find_one({"_id": member})
-    if db_data is None:
-      createProfile(member)
+    if db_data is not None and db_data["checkedIn"]:
+      collection.update_one({"_id": member}, {"$set": {"checkedIn": False}})
+  return 'Ok'
+
+def collectAttendance():
+  members = slack_client.conversations_members(channel=announce_channel, limit=200)["members"]
+  for member in members:
+    db_data = collection.find_one({'_id': member})
+    if db_data is not None and db_data["checkedIn"]:
+      increaseBits(db_data['_id'], 2)
   return 'Ok'
 
 def updateTeamBytes(team_name, num_inc):
@@ -191,7 +199,6 @@ def findBitAmount(users):
         teams[team] = 1
       else:
         teams[team] += 1
-
   bit_amount = 2
   for team in teams.keys():
     if teams[team] == len(users) or team == "Exec":
@@ -205,23 +212,21 @@ def findBitAmount(users):
 # Respond to DMs
 @slack_events_adapter.on("message")
 def handle_message(event_data):
-  message = event_data["event"]
-  text = message.get('text')
-  user_id = message["user"]
-  channel_id = message["channel"]
-  channel_type = message["channel_type"]
-  timestamp_message = message["ts"]
+  try:
+    message = event_data["event"]
+    text = message.get('text')
+    user_id = message["user"]
+    channel_id = message["channel"]
+    channel_type = message["channel_type"]
+    timestamp_message = message["ts"]
 
-  if channel_type == "channel" and user_id != bogbot_id and float(timestamp_message) > currentTimestamp:
-    if channel_id == bits_channel and "parent_user_id" not in message:
-      if text != '' and "files" in message:
-        slack_client.reactions_add(channel=bits_channel, name="doughnut", timestamp=timestamp_message)
-        slack_client.reactions_add(channel=bits_channel, name="camera_with_flash", timestamp=timestamp_message)
-      else:
-        slack_client.reactions_add(channel=bits_channel, name="michelle_facepalm", timestamp=timestamp_message)
-        slack_client.reactions_add(channel=bits_channel, name="face_with_monocle", timestamp=timestamp_message)
+    text = text[0].lower() + text[1:]
 
-      if text != '':
+    if user_id != bogbot_id:
+      print(collection.find_one({"_id": user_id})["name"] + ": " + text)
+
+    if channel_type == "channel" and user_id != bogbot_id and float(timestamp_message) > currentTimestamp:
+      if channel_id == bits_channel and text !='' and "parent_user_id" not in message:
         dateUsers = parseNames(message)
         bit_amount = findBitAmount(dateUsers)
         response = "The bit amount is: %d" % bit_amount
@@ -233,137 +238,172 @@ def handle_message(event_data):
           response = "%d Bits added for <@%s> for a donut date, making their Bit count: %d" % (bit_amount, user, new_bit_count)
           slack_client.chat_postMessage(channel=im_channel, text=response)
 
-    elif channel_id == dogs_channel:
-      if "files" in message:
-        slack_client.reactions_add(channel=dogs_channel, name="doge2", timestamp=timestamp_message)
-        slack_client.reactions_add(channel=dogs_channel, name="heart_eyes", timestamp=timestamp_message)
-        bit_amount = 2
-        increaseBits(user_id, bit_amount)
-        new_bit_count = collection.find_one({"_id": user_id})['bits']
-        response = "%d Bits added for <@%s> for doggy pics, making their Bit count: %d" % (bit_amount, user_id, new_bit_count)
-        slack_client.chat_postMessage(channel=im_channel, text=response)
+        if "files" in message:
+          slack_client.reactions_add(channel=bits_channel, name="doughnut", timestamp=timestamp_message)
+          slack_client.reactions_add(channel=bits_channel, name="camera_with_flash", timestamp=timestamp_message)
+        else:
+          slack_client.reactions_add(channel=bits_channel, name="michelle_facepalm", timestamp=timestamp_message)
+          slack_client.reactions_add(channel=bits_channel, name="face_with_monocle", timestamp=timestamp_message)
 
-    elif channel_id == memes_channel:
-      if "files" in message:
-        slack_client.reactions_add(channel=memes_channel, name="laughing", timestamp=timestamp_message)
-        bit_amount = 2
-        increaseBits(user_id, bit_amount)
-        new_bit_count = collection.find_one({"_id": user_id})['bits']
-        response = "%d Bits added for <@%s> for adding a meme, making their Bit count: %d" % (bit_amount, user_id, new_bit_count)
-        slack_client.chat_postMessage(channel=im_channel, text=response)
+      elif channel_id == dogs_channel:
+        if "files" in message and "parent_user_id" not in message:
+          slack_client.reactions_add(channel=dogs_channel, name="doge2", timestamp=timestamp_message)
+          slack_client.reactions_add(channel=dogs_channel, name="heart_eyes", timestamp=timestamp_message)
+          bit_amount = 2
+          increaseBits(user_id, bit_amount)
+          new_bit_count = collection.find_one({"_id": user_id})['bits']
+          response = "%d Bits added for <@%s> for doggy pics, making their Bit count: %d" % (bit_amount, user_id, new_bit_count)
+          slack_client.chat_postMessage(channel=im_channel, text=response)
 
-  else:
-    if channel_type == "im" and message.get("subtype") is None and user_id != bogbot_id:
-      if ("hi" in text[0:2] or "hello" in text[0:5]):
-        response = 'Hello <@%s>! :tada:' % user_id
-      elif "cheatsheet" in text[0:10]:
-        response = config.cheatsheet_link
-      elif "chanid" in text[0:6] and user_id == admin_id:
-        response = "Channel id: " + channel_id
-      elif "see rank" in text[0:8] and user_id == admin_id:
-        displayRankings()
-        response = "Displayed!"
-      elif "post rank" in text[0:9] and user_id == admin_id:
-        postRankings()
-        response = "Displayed!"
-      elif "see bitrank" in text[0:11] and user_id == admin_id:
-        response = findTopFiveBits(channel_id)
-      elif "see byterank" in text[0:12] and user_id == admin_id:
-        response = findTopThreeBytes(channel_id)
-      elif "add bit" in text[0:7] and user_id == admin_id:
-        try:
-          usersToAdd, num_inc = text.split(' ')[2:-1], text.split(' ')[-1]
-          for user in usersToAdd:
-            user = user[2:-1]
-            increaseBits(user, num_inc)
-            new_bit_count = collection.find_one({"_id": user})['bits']
-            response = "%s Bits added for <@%s>, making their Bit count: %d" % (num_inc, user, new_bit_count)
-            slack_client.chat_postMessage(channel=channel_id, text=response)
-          response = ' '
-        except NameError:
-          response = "Missing a parameter"
-      elif "set bit" in text[0:7] and user_id == admin_id:
-        try:
-          userToAdd, numToSet = text.split(' ')[2], text.split(' ')[3]
-          userToAdd = userToAdd[2:-1]
-          updateBits(userToAdd, numToSet)
-          new_bit_count = collection.find_one({"_id": userToAdd})['bits']
-          response = "<@%s> Bit count: %d" % (userToAdd, new_bit_count)
-        except NameError:
-          response = "Missing a parameter"
-      elif "see bit" in text[0:7] and user_id == admin_id:
-        try:
-          userToAdd = text.split(' ')[2]
-          userToAdd = userToAdd[2:-1]
-          bit_count = collection.find_one({"_id": userToAdd})['bits']
-          response = "<@%s> Bit count: %d" % (userToAdd, bit_count)
-        except NameError:
-          response = "Missing a parameter"
-      elif "bit" in text[0:3]:
-        bit_count = findAndRetrieveBits(user_id)
-        response = 'Your Bit count: %d' % bit_count
-      elif "add byte" in text[0:8] and user_id==admin_id:
-        try:
-          team = text.split(' ')[2]
-          if team == "BGC":
-            team = team + " " + text.split(' ')[3]
-            num_inc = text.split(' ')[4]
-          else:
-            num_inc = text.split(' ')[3]
-          updateTeamBytes(team, num_inc)
-          new_byte_count = collection.find_one({"name": team})['bytes']
-          response = "%s Bytes Added for Team %s, making their Byte count: %d!" % (num_inc, team, new_byte_count)
-        except NameError:
-          response = "Missing a parameter"
-      elif "see byte" in text[0:8]:
-        try:
-          team = text.split(' ')[2]
-          if team == "BGC":
-            team = team + " " + text.split(' ')[3]
-          try:
-            byte_count = collection.find_one({"name": team})['bytes']
-            response = "Team %s byte count: %d" % (team, byte_count)
-          except TypeError:
-            if team in ["Marketing", "Community", "Product Ops", "Finance", "Events"]:
-              response = "Committees do not compete for Bytes"
-            elif team in ["Exec", "Bootcamp", "Website", "NPP"]:
-              response = "%s does not compete for Bytes" % team
+      elif channel_id == memes_channel:
+        if "files" in message and "parent_user_id" not in message:
+          slack_client.reactions_add(channel=memes_channel, name="laughing", timestamp=timestamp_message)
+          bit_amount = 2
+          increaseBits(user_id, bit_amount)
+          new_bit_count = collection.find_one({"_id": user_id})['bits']
+          response = "%d Bits added for <@%s> for adding a meme, making their Bit count: %d" % (bit_amount, user_id, new_bit_count)
+          slack_client.chat_postMessage(channel=im_channel, text=response)
+
+    else:
+      if channel_type == "im" and message.get("subtype") is None and user_id != bogbot_id and float(timestamp_message) > currentTimestamp:
+        if ("hi" in text[0:2] or "hello" in text[0:5]):
+          response = 'Hello <@%s>! :tada:' % user_id
+        elif "update pass" in text[0:11] and user_id == admin_id:
+          message = (' ').join(text.split(' ')[2:])
+          collection.find_one_and_update({'name': "checkIn"}, {'$set': {'password': message}})
+          response = "Updated password to %s!" % message
+        elif "checkin" in text[0:7]:
+          password = text.split(' ')
+          if len(password) != 2:
+            response = "Enter a valid password"
+          elif password[1] == collection.find_one({'name': 'checkIn'})['password']:
+            if collection.find_one({"_id": user_id})['checkedIn']:
+              response = "Already checked in."
             else:
-              response = "Invalid team name (use title-case) \n Options: BGC Safety, BGC Dynamics, DMS, Liv2BGirl, MedShare, Miqueas, Ombudsman, PACTS, VMS"
-        except IndexError:
-          response = "Missing a parameter"
-      elif "byte" in text[0:5]:
-        response = ' '
-        findAndRetrieveBytes(channel_id, user_id)
-      elif "team" in text[0:4]:
-        team = findAndRetrieveTeam(user_id)
-        response = '<@%s> is on team %s!' % (user_id, team)
-      elif "add bday" in text[0:8]:
-        try:
-          birthday_date = text.split(' ')[2]
-          response = add_birthday(user_id, birthday_date)
-        except IndexError:
-          response = "Missing 'date' parameter. Use 'add bday MM-DD' to add your birthday!"
-      elif "bday" in text[0:4]:
-        response = findAndRetrieveBday(user_id)
-      elif "help" in text[0:4]:
-        response = "Available commands:\n" \
-          + "hi or hello                        Welcome message.\n" \
-          + "cheatsheet                       Link to bits/bytes cheatsheet.\n" \
-          + "team                                 See your current team(s).\n" \
-          + "bits                                   See your current bit count.\n" \
-          + "bytes                                See your current byte count.\n" \
-          + "see bytes [team]             See the current byte count for a specific team\n" \
-          + "bday                                 Display your birthday.\n" \
-          + "add bday [MM-DD]        Adds your birthday to the database."
-      elif "execute order 66" in text and user_id==admin_id:
-        executeOrder66(channel_id)
-        response = "Executed my Lord"
-      else:
-        response = "Unknown command. Type 'help' for list of commands."
+              collection.update_one({"_id": user_id}, {"$set": {"checkedIn": True}})
+              response = "Checked In!"
+          else:
+            response = "Incorrect password."
+        elif "update meet" in text[0:11] and user_id == admin_id:
+          message = (' ').join(text.split(' ')[2:])
+          collection.find_one_and_update({'name': "locHours"}, {'$set': {'response': message}})
+          response = "Updated meetings!"
+        elif "meeting" in text[0:7]:
+          response = collection.find_one({"name": "locHours"})['response']
+        elif "cheatsheet" in text[0:10]:
+          response = config.cheatsheet_link
+        elif "chanid" in text[0:6] and user_id == admin_id:
+          response = "Channel id: " + channel_id
+        elif "see rank" in text[0:8] and user_id == admin_id:
+          displayRankings()
+          response = "Displayed!"
+        elif "post rank" in text[0:9] and user_id == admin_id:
+          postRankings()
+          response = "Displayed!"
+        elif "see bitrank" in text[0:11] and user_id == admin_id:
+          response = findTopFiveBits(channel_id)
+        elif "see byterank" in text[0:12] and user_id == admin_id:
+          response = findTopThreeBytes(channel_id)
+        elif "add bit" in text[0:7] and user_id == admin_id:
+          try:
+            usersToAdd, num_inc = text.split(' ')[2:-1], text.split(' ')[-1]
+            for user in usersToAdd:
+              user = user[2:-1]
+              increaseBits(user, num_inc)
+              new_bit_count = collection.find_one({"_id": user})['bits']
+              response = "%s Bits added for <@%s>, making their Bit count: %d" % (num_inc, user, new_bit_count)
+              slack_client.chat_postMessage(channel=channel_id, text=response)
+            response = ' '
+          except NameError:
+            response = "Missing a parameter"
+        elif "set bit" in text[0:7] and user_id == admin_id:
+          try:
+            userToAdd, numToSet = text.split(' ')[2], text.split(' ')[3]
+            userToAdd = userToAdd[2:-1]
+            updateBits(userToAdd, numToSet)
+            new_bit_count = collection.find_one({"_id": userToAdd})['bits']
+            response = "<@%s> Bit count: %d" % (userToAdd, new_bit_count)
+          except NameError:
+            response = "Missing a parameter"
+        elif "see bit" in text[0:7] and user_id == admin_id:
+          try:
+            userToAdd = text.split(' ')[2]
+            userToAdd = userToAdd[2:-1]
+            bit_count = collection.find_one({"_id": userToAdd})['bits']
+            response = "<@%s> Bit count: %d" % (userToAdd, bit_count)
+          except NameError:
+            response = "Missing a parameter"
+        elif "bit" in text[0:3]:
+          bit_count = findAndRetrieveBits(user_id)
+          response = 'Your Bit count: %d' % bit_count
+        elif "add byte" in text[0:8] and user_id==admin_id:
+          try:
+            team = text.split(' ')[2]
+            if team == "BGC":
+              team = team + " " + text.split(' ')[3]
+              num_inc = text.split(' ')[4]
+            else:
+              num_inc = text.split(' ')[3]
+            updateTeamBytes(team, num_inc)
+            new_byte_count = collection.find_one({"name": team})['bytes']
+            response = "%s Bytes Added for Team %s, making their Byte count: %d!" % (num_inc, team, new_byte_count)
+          except NameError:
+            response = "Missing a parameter"
+        elif "see byte" in text[0:8]:
+          try:
+            team = text.split(' ')[2]
+            if team == "BGC":
+              team = team + " " + text.split(' ')[3]
+            try:
+              byte_count = collection.find_one({"name": team})['bytes']
+              response = "Team %s byte count: %d" % (team, byte_count)
+            except TypeError:
+              if team in ["Marketing", "Community", "Product Ops", "Finance", "Events"]:
+                response = "Committees do not compete for Bytes"
+              elif team in ["Exec", "Bootcamp", "Website", "NPP"]:
+                response = "%s does not compete for Bytes" % team
+              else:
+                response = "Invalid team name (use title-case) \n Options: BGC Safety, BGC Dynamics, DMS, Liv2BGirl, MedShare, Miqueas, Ombudsman, PACTS, VMS"
+          except IndexError:
+            response = "Missing a parameter"
+        elif "byte" in text[0:5]:
+          response = ' '
+          findAndRetrieveBytes(channel_id, user_id)
+        elif "team" in text[0:4]:
+          team = findAndRetrieveTeam(user_id)
+          response = '<@%s> is on team %s!' % (user_id, team)
+        elif "add bday" in text[0:8]:
+          try:
+            birthday_date = text.split(' ')[2]
+            response = add_birthday(user_id, birthday_date)
+          except IndexError:
+            response = "Missing 'date' parameter. Use 'add bday MM-DD' to add your birthday!"
+        elif "bday" in text[0:4]:
+          response = findAndRetrieveBday(user_id)
+        elif "help" in text[0:4]:
+          response = "Available commands:\n" \
+            + "hi or hello                        Welcome message.\n" \
+            + "meeting                            See meeting locations/times for the week.\n" \
+            + "cheatsheet                       Link to bits/bytes cheatsheet.\n" \
+            + "bits                                   See your current bit count.\n" \
+            + "bytes                                See your current byte count.\n" \
+            + "team                                 See your current team(s).\n" \
+            + "see bytes [team]             See the current byte count for a specific team\n" \
+            + "bday                                 Display your birthday.\n" \
+            + "add bday [MM-DD]        Adds your birthday to the database."
+        elif "clear attendance" in text[0:16] and user_id==admin_id:
+          clearAttendance()
+          response = "Attendance has been cleared"
+        elif "collect attendance" in text[0:18] and user_id == admin_id:
+          collectAttendance()
+          response = "Attendance collected"
+        else:
+          response = "Unknown command. Type 'help' for list of commands."
 
-      if response != ' ':
-        slack_client.chat_postMessage(channel=channel_id, text=response)
+        if response != ' ':
+          slack_client.chat_postMessage(channel=channel_id, text=response)
+  except KeyError:
+    print()
 
 # Error events
 @slack_events_adapter.on("error")
@@ -378,7 +418,6 @@ slack_events_adapter.start(host="0.0.0.0", port=3000)
 # Check BDay
 
 # Update Bit/Byte Rankings Every Week
-# schedule.every().wednesday.at("20:16").do(displayRankings)
 
 # channel_list = slack_client.conversations_list(limit=500)["channels"]
 # for channel in channel_list:
