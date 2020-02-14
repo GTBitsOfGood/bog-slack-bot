@@ -1,4 +1,4 @@
-import os, pymongo, datetime, schedule, time
+import os, pymongo, datetime, time
 import config
 from datetime import datetime
 from pymongo import MongoClient
@@ -106,22 +106,6 @@ def createProfile(user_id):
   user_data = slack_client.users_info(user=user_id)['user']
   post = {"_id": user_id, "name": user_data['real_name'], "team": "Update", "bits": 0, "birthday": "Update"}
   collection.insert_one(post)
-  return 'Ok'
-
-def clearAttendance():
-  members = slack_client.conversations_members(channel=announce_channel, limit=200)["members"]
-  for member in members:
-    db_data = collection.find_one({"_id": member})
-    if db_data is not None and db_data["checkedIn"]:
-      collection.update_one({"_id": member}, {"$set": {"checkedIn": False}})
-  return 'Ok'
-
-def collectAttendance():
-  # members = slack_client.conversations_members(channel=announce_channel, limit=200)["members"]
-  # for member in members:
-  #   db_data = collection.find_one({'_id': member})
-  #   if db_data is not None and db_data["checkedIn"]:
-  #     increaseBits(db_data['_id'], 2)
   return 'Ok'
 
 def updateTeamBytes(team_name, num_inc):
@@ -268,6 +252,9 @@ def handle_message(event_data):
       if channel_type == "im" and message.get("subtype") is None and user_id != bogbot_id and float(timestamp_message) > currentTimestamp:
         if ("hi" in text[0:2] or "hello" in text[0:5]):
           response = 'Hello <@%s>! :tada:' % user_id
+        elif "see pass" in text[0:8] and user_id == admin_id:
+          passObject = collection.find_one({'name': 'checkIn'})
+          response = passObject["password"]
         elif "update pass" in text[0:11] and user_id == admin_id:
           message = (' ').join(text.split(' ')[2:])
           collection.find_one_and_update({'name': "checkIn"}, {'$set': {'password': message}})
@@ -363,7 +350,7 @@ def handle_message(event_data):
               elif team in ["Exec", "Bootcamp", "Website", "NPP"]:
                 response = "%s does not compete for Bytes" % team
               else:
-                response = "Invalid team name (use title-case) \n Options: BGC Safety, BGC Dynamics, DMS, Liv2BGirl, MedShare, Miqueas, Ombudsman, PACTS, VMS"
+                response = "Invalid team name (use title-case) \n Options: BGC Safety, BGC Power, DMS, Liv2BGirl, MedShare, Miqueas, Ombudsman, PACTS, VMS"
           except IndexError:
             response = "Missing a parameter"
         elif "byte" in text[0:5]:
@@ -391,12 +378,6 @@ def handle_message(event_data):
             + "see bytes [team]             See the current byte count for a specific team\n" \
             + "bday                                 Display your birthday.\n" \
             + "add bday [MM-DD]        Adds your birthday to the database."
-        elif "clear attendance" in text[0:16] and user_id==admin_id:
-          clearAttendance()
-          response = "Attendance has been cleared"
-        elif "collect attendance" in text[0:18] and user_id == admin_id:
-          collectAttendance()
-          response = "Attendance collected"
         else:
           response = "Unknown command. Type 'help' for list of commands."
 
