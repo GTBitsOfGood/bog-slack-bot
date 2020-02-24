@@ -42,9 +42,8 @@ else:
         ws.write(i,2, member["email"])
 
         # Update DB
-        collection.update_one({"name": member["name"]},
-            {"$set": {"checkedIn": False}})
-            # {"$inc": {"bits": num_inc}})
+        collection.update_one({"name": member["name"]}, {"$set": {"checkedIn": False}})
+        collection.update_one({"name": member["name"]}, {"$inc": {"bits": num_inc}})
 
         print(member["name"] + " checked in for %d bits." % num_inc)
         i += 1

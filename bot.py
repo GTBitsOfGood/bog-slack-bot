@@ -370,6 +370,7 @@ def handle_message(event_data):
         elif "help" in text[0:4]:
           response = "Available commands:\n" \
             + "hi or hello                        Welcome message.\n" \
+            + "checkin [password]         Attendance at Bootcamp/Team Meetings/Office Hours!.\n" \
             + "meeting                            See meeting locations/times for the week.\n" \
             + "cheatsheet                       Link to bits/bytes cheatsheet.\n" \
             + "bits                                   See your current bit count.\n" \
