@@ -77,6 +77,18 @@ def findAndRetrieveTeam(user_id):
     team = ", ".join(team.split(";"))
   return team
 
+def findTeamMembers(team_name):
+  result = collection.find()
+  fakeVar = 0
+  members = "";
+  for user in list(result):
+    try:
+      if team_name in user['team'].split(';'):
+        members = members + "<@" + user['_id'] + "> "
+    except KeyError:
+      fakeVar += 1
+  return members.strip()
+
 def add_birthday(user_id, date):
   try:
     if (collection.find_one({"_id": user_id})["birthday"] == "Update"):
@@ -204,30 +216,27 @@ def handle_message(event_data):
     channel_type = message["channel_type"]
     timestamp_message = message["ts"]
 
-    text = text[0].lower() + text[1:]
+    if text != "":
+      text = text[0].lower() + text[1:]
 
     if user_id != bogbot_id:
       print(collection.find_one({"_id": user_id})["name"] + ": " + text)
 
     if channel_type == "channel" and user_id != bogbot_id and float(timestamp_message) > currentTimestamp:
-      if channel_id == bits_channel and text !='' and "parent_user_id" not in message:
-        dateUsers = parseNames(message)
-        bit_amount = findBitAmount(dateUsers)
-        response = "The bit amount is: %d" % bit_amount
-        slack_client.chat_postMessage(channel=im_channel, text=response)
+      if channel_id == bits_channel:
+        if text !='' and "parent_user_id" not in message:
+          dateUsers = parseNames(message)
+          bit_amount = findBitAmount(dateUsers)
 
-        for user in dateUsers:
-          increaseBits(user, bit_amount)
-          new_bit_count = collection.find_one({"_id": user})['bits']
-          response = "%d Bits added for <@%s> for a donut date, making their Bit count: %d" % (bit_amount, user, new_bit_count)
-          slack_client.chat_postMessage(channel=im_channel, text=response)
+          for user in dateUsers:
+            increaseBits(user, bit_amount)
+            new_bit_count = collection.find_one({"_id": user})['bits']
+            response = "%d Bits added for <@%s> for a donut date, making their Bit count: %d" % (bit_amount, user, new_bit_count)
+            slack_client.chat_postMessage(channel=test_channel, text=response)
 
         if "files" in message:
           slack_client.reactions_add(channel=bits_channel, name="doughnut", timestamp=timestamp_message)
-          slack_client.reactions_add(channel=bits_channel, name="camera_with_flash", timestamp=timestamp_message)
-        else:
-          slack_client.reactions_add(channel=bits_channel, name="michelle_facepalm", timestamp=timestamp_message)
-          slack_client.reactions_add(channel=bits_channel, name="face_with_monocle", timestamp=timestamp_message)
+          slack_client.reactions_add(channel=bits_channel, name="heart", timestamp=timestamp_message)
 
       elif channel_id == dogs_channel:
         if "files" in message and "parent_user_id" not in message:
@@ -237,7 +246,7 @@ def handle_message(event_data):
           increaseBits(user_id, bit_amount)
           new_bit_count = collection.find_one({"_id": user_id})['bits']
           response = "%d Bits added for <@%s> for doggy pics, making their Bit count: %d" % (bit_amount, user_id, new_bit_count)
-          slack_client.chat_postMessage(channel=im_channel, text=response)
+          slack_client.chat_postMessage(channel=test_channel, text=response)
 
       elif channel_id == memes_channel:
         if "files" in message and "parent_user_id" not in message:
@@ -246,7 +255,7 @@ def handle_message(event_data):
           increaseBits(user_id, bit_amount)
           new_bit_count = collection.find_one({"_id": user_id})['bits']
           response = "%d Bits added for <@%s> for adding a meme, making their Bit count: %d" % (bit_amount, user_id, new_bit_count)
-          slack_client.chat_postMessage(channel=im_channel, text=response)
+          slack_client.chat_postMessage(channel=test_channel, text=response)
 
     else:
       if channel_type == "im" and message.get("subtype") is None and user_id != bogbot_id and float(timestamp_message) > currentTimestamp:
@@ -260,7 +269,7 @@ def handle_message(event_data):
           collection.find_one_and_update({'name': "checkIn"}, {'$set': {'password': message}})
           response = "Updated password to %s!" % message
         elif "checkin" in text[0:7]:
-          password = text.split(' ')
+          password = text.strip().split(' ')
           if len(password) != 2:
             response = "Enter a valid password"
           elif password[1] == collection.find_one({'name': 'checkIn'})['password']:
@@ -356,6 +365,11 @@ def handle_message(event_data):
         elif "byte" in text[0:5]:
           response = ' '
           findAndRetrieveBytes(channel_id, user_id)
+        elif "team members" in text[0:12] and user_id==admin_id:
+          team = text.split(' ')[2]
+          if team == "BGC":
+            team = team + " " + text.split(' ')[3]
+          response = findTeamMembers(team)
         elif "team" in text[0:4]:
           team = findAndRetrieveTeam(user_id)
           response = '<@%s> is on team %s!' % (user_id, team)
