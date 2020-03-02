@@ -136,7 +136,7 @@ def updateBits(user_id, numToSet):
   collection.find_one_and_update({'_id': user_id}, {'$set': {'bits': int(numToSet)}})
   return 'Ok'
 
-def findTopFiveBits():
+def findTopTenBits():
   result = collection.find()
   member_bits = []
   fakeVar = 0
@@ -147,7 +147,7 @@ def findTopFiveBits():
     except KeyError:
       fakeVar += 1
   topBits = sorted(member_bits, key = lambda x: x[1], reverse=True)
-  response = "Current Bit Standings:\n 1. <@%s> with %d bits!\n 2. <@%s> with %d bits!\n 3. <@%s> with %d bits!\n 4. <@%s> with %d bits!\n 5. <@%s> with %d bits!" % (topBits[0][0], topBits[0][1], topBits[1][0], topBits[1][1], topBits[2][0], topBits[2][1], topBits[3][0], topBits[3][1], topBits[4][0], topBits[4][1])
+  response = "Current Bit Standings:\n 1. <@%s> with %d bits!\n 2. <@%s> with %d bits!\n 3. <@%s> with %d bits!\n 4. <@%s> with %d bits!\n 5. <@%s> with %d bits!\n 6. <@%s> with %d bits!\n 7. <@%s> with %d bits!\n 8. <@%s> with %d bits!\n 9. <@%s> with %d bits!\n 10. <@%s> with %d bits!" % (topBits[0][0], topBits[0][1], topBits[1][0], topBits[1][1], topBits[2][0], topBits[2][1], topBits[3][0], topBits[3][1], topBits[4][0], topBits[4][1], topBits[5][0], topBits[5][1], topBits[6][0], topBits[6][1], topBits[7][0], topBits[7][1], topBits[8][0], topBits[8][1], topBits[9][0], topBits[9][1])
   return response
 
 def findTopThreeBytes():
@@ -165,13 +165,13 @@ def findTopThreeBytes():
   return response
 
 def displayRankings():
-  response = findTopFiveBits()
+  response = findTopTenBits()
   response = response + "\n\n" + findTopThreeBytes() + "\n\n Bit/Byte Cheatsheet:\n" + config.cheatsheet_link
   slack_client.chat_postMessage(channel=test_channel, text=response)
   return 'OK'
 
 def postRankings():
-  response = findTopFiveBits()
+  response = findTopTenBits()
   response = response + "\n\n" + findTopThreeBytes() + "\n\n Bit/Byte Cheatsheet:\n" + config.cheatsheet_link
   slack_client.chat_postMessage(channel=announce_channel, text=response)
   return 'OK'
