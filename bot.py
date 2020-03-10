@@ -129,7 +129,7 @@ def increaseBits(user_id, num_inc):
   for team in teams:
     if team == 'Exec':
       num_inc = 0
-  collection.find_one_and_update({'_id': user_id}, {'$inc': {'bits': int(num_inc)}})
+    else: collection.find_one_and_update({'_id': user_id}, {'$inc': {'bits': int(num_inc)}})
   return 'Ok'
 
 def updateBits(user_id, numToSet):
@@ -297,7 +297,7 @@ def handle_message(event_data):
           postRankings()
           response = "Displayed!"
         elif "see bitrank" in text[0:11] and user_id == admin_id:
-          response = findTopFiveBits(channel_id)
+          response = findTopTenBits(channel_id)
         elif "see byterank" in text[0:12] and user_id == admin_id:
           response = findTopThreeBytes(channel_id)
         elif "add bit" in text[0:7] and user_id == admin_id:
