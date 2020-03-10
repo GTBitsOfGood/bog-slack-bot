@@ -286,6 +286,12 @@ def handle_message(event_data):
           response = "Updated meetings!"
         elif "meeting" in text[0:7]:
           response = collection.find_one({"name": "locHours"})['response']
+        elif "update meetexec" in text[0:15] and user_id == admin_id:
+          message = (' ').join(text.split(' ')[2:])
+          collection.find_one_and_update({'name': "execCal"}, {'$set': {'response': message}})
+          response = "Updated meetings!"
+        elif "meetexec" in text[0:8]:
+          response = collection.find_one({"name": "execCal"})['response']
         elif "cheatsheet" in text[0:10]:
           response = config.cheatsheet_link
         elif "chanid" in text[0:6] and user_id == admin_id:
