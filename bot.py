@@ -277,14 +277,14 @@ def handle_message(event_data):
               response = "Already checked in."
             else:
               collection.update_one({"_id": user_id}, {"$set": {"checkedIn": True}})
-              response = "Checked In!"
+              response = "Checked in! Don’t forget to fill out this : https://tinyurl.com/bog-midpoint"
           else:
             response = "Incorrect password."
         elif "update meetexec" in text[0:15] and user_id == admin_id:
           message = (' ').join(text.split(' ')[2:])
           collection.find_one_and_update({'name': "execCal"}, {'$set': {'response': message}})
           response = "Updated exec meetings!"
-        elif "meetexec" in text[0:8]:
+        elif "meet exec" in text[0:9]:
           response = collection.find_one({"name": "execCal"})['response']
         elif "update meet" in text[0:11] and user_id == admin_id:
           message = (' ').join(text.split(' ')[2:])
