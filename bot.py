@@ -277,7 +277,7 @@ def handle_message(event_data):
               response = "Already checked in."
             else:
               collection.update_one({"_id": user_id}, {"$set": {"checkedIn": True}})
-              response = "Checked in! Don’t forget to fill out this : https://tinyurl.com/bog-midpoint"
+              response = "Checked in! Don’t forget to fill this out: https://tinyurl.com/bog-exit-s2020"
           else:
             response = "Incorrect password."
         elif "update meetexec" in text[0:15] and user_id == admin_id:
