@@ -24,7 +24,7 @@ slack_bot_token = config.slack_token
 slack_client = WebClient(slack_bot_token)
 
 # Slack ID for admin and Bot
-admin_id = config.admin_id
+admin_ids = config.admin_ids
 bogbot_id = slack_client.auth_test()["user_id"]
 
 # Get current timestamp
@@ -261,10 +261,10 @@ def handle_message(event_data):
       if channel_type == "im" and message.get("subtype") is None and user_id != bogbot_id and float(timestamp_message) > currentTimestamp:
         if ("hi" in text[0:2] or "hello" in text[0:5]):
           response = 'Hello <@%s>! :tada:' % user_id
-        elif "see pass" in text[0:8] and user_id == admin_id:
+        elif "see pass" in text[0:8] and user_id in admin_ids:
           passObject = collection.find_one({'name': 'checkIn'})
           response = passObject["password"]
-        elif "update pass" in text[0:11] and user_id == admin_id:
+        elif "update pass" in text[0:11] and user_id in admin_ids:
           message = (' ').join(text.split(' ')[2:])
           collection.find_one_and_update({'name': "checkIn"}, {'$set': {'password': message}})
           response = "Updated password to %s!" % message
@@ -277,16 +277,16 @@ def handle_message(event_data):
               response = "Already checked in."
             else:
               collection.update_one({"_id": user_id}, {"$set": {"checkedIn": True}})
-              response = "Checked in! Don’t forget to fill this out: https://tinyurl.com/bog-exit-s2020"
+              response = "Checked in! Make sure to fill this out: https://tinyurl.com/team-feedback-s2020\nPlease make sure to read the note at the top!!!"
           else:
             response = "Incorrect password."
-        elif "update meetexec" in text[0:15] and user_id == admin_id:
+        elif "update meetexec" in text[0:15] and user_id in admin_ids:
           message = (' ').join(text.split(' ')[2:])
           collection.find_one_and_update({'name': "execCal"}, {'$set': {'response': message}})
           response = "Updated exec meetings!"
         elif "meet exec" in text[0:9]:
           response = collection.find_one({"name": "execCal"})['response']
-        elif "update meet" in text[0:11] and user_id == admin_id:
+        elif "update meet" in text[0:11] and user_id in admin_ids:
           message = (' ').join(text.split(' ')[2:])
           collection.find_one_and_update({'name': "locHours"}, {'$set': {'response': message}})
           response = "Updated meetings!"
@@ -294,19 +294,19 @@ def handle_message(event_data):
           response = collection.find_one({"name": "locHours"})['response']
         elif "cheatsheet" in text[0:10]:
           response = config.cheatsheet_link
-        elif "chanid" in text[0:6] and user_id == admin_id:
+        elif "chanid" in text[0:6] and user_id in admin_ids:
           response = "Channel id: " + channel_id
-        elif "see rank" in text[0:8] and user_id == admin_id:
+        elif "see rank" in text[0:8] and user_id in admin_ids:
           displayRankings()
           response = "Displayed!"
-        elif "post rank" in text[0:9] and user_id == admin_id:
+        elif "post rank" in text[0:9] and user_id in admin_ids:
           postRankings()
           response = "Displayed!"
-        elif "see bitrank" in text[0:11] and user_id == admin_id:
+        elif "see bitrank" in text[0:11] and user_id in admin_ids:
           response = findTopTenBits(channel_id)
-        elif "see byterank" in text[0:12] and user_id == admin_id:
+        elif "see byterank" in text[0:12] and user_id in admin_ids:
           response = findTopThreeBytes(channel_id)
-        elif "add bit" in text[0:7] and user_id == admin_id:
+        elif "add bit" in text[0:7] and user_id in admin_ids:
           try:
             usersToAdd, num_inc = text.split(' ')[2:-1], text.split(' ')[-1]
             for user in usersToAdd:
@@ -318,7 +318,7 @@ def handle_message(event_data):
             response = ' '
           except NameError:
             response = "Missing a parameter"
-        elif "set bit" in text[0:7] and user_id == admin_id:
+        elif "set bit" in text[0:7] and user_id in admin_ids:
           try:
             userToAdd, numToSet = text.split(' ')[2], text.split(' ')[3]
             userToAdd = userToAdd[2:-1]
@@ -327,7 +327,7 @@ def handle_message(event_data):
             response = "<@%s> Bit count: %d" % (userToAdd, new_bit_count)
           except NameError:
             response = "Missing a parameter"
-        elif "see bit" in text[0:7] and user_id == admin_id:
+        elif "see bit" in text[0:7] and user_id in admin_ids:
           try:
             userToAdd = text.split(' ')[2]
             userToAdd = userToAdd[2:-1]
@@ -338,7 +338,7 @@ def handle_message(event_data):
         elif "bit" in text[0:3]:
           bit_count = findAndRetrieveBits(user_id)
           response = 'Your Bit count: %d' % bit_count
-        elif "add byte" in text[0:8] and user_id==admin_id:
+        elif "add byte" in text[0:8] and user_id in admin_ids:
           try:
             team = text.split(' ')[2]
             if team == "BGC":
@@ -371,7 +371,7 @@ def handle_message(event_data):
         elif "byte" in text[0:5]:
           response = ' '
           findAndRetrieveBytes(channel_id, user_id)
-        elif "team members" in text[0:12] and user_id==admin_id:
+        elif "team members" in text[0:12] and user_id in admin_ids:
           team = text.split(' ')[2]
           if team == "BGC":
             team = team + " " + text.split(' ')[3]
